@@ -1,0 +1,20 @@
+# Node dependencies
+frontend/node_modules/
+
+# Frontend build output
+frontend/dist/
+
+# Java/Maven build output
+backend/target/
+
+# Environment files
+.env
+.env.*
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
