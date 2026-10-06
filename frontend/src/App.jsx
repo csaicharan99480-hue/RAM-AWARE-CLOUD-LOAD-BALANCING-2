@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 const API_BASE = 'http://localhost:8080';
 const NAV_ITEMS = [
@@ -14,31 +14,31 @@ const NAV_ITEMS = [
 
 const emptyResourceForm = {
   name: '',
-  hostCount: 1,
-  hostMips: 2000,
-  hostPes: 4,
-  hostRamMb: 16384,
-  hostBandwidthMbps: 10000,
-  hostStorageGb: 1000,
-  schedulingInterval: 1
+  hostCount: '',
+  hostMips: '',
+  hostPes: '',
+  hostRamMb: '',
+  hostBandwidthMbps: '',
+  hostStorageGb: '',
+  schedulingInterval: ''
 };
 
 const emptyVmForm = {
   id: '',
-  mips: 1500,
-  pes: 2,
-  ramMb: 4096,
-  bandwidthMbps: 1000,
-  storageGb: 100
+  mips: '',
+  pes: '',
+  ramMb: '',
+  bandwidthMbps: '',
+  storageGb: ''
 };
 
 const emptyCloudletForm = {
   id: '',
-  length: 15000,
-  pes: 1,
-  fileSize: 300,
-  outputSize: 300,
-  ramRequirementMb: 2048
+  length: '',
+  pes: '',
+  fileSize: '',
+  outputSize: '',
+  ramRequirementMb: ''
 };
 
 const emptyExperimentForm = {
@@ -68,35 +68,140 @@ function formatNumber(value) {
   return Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
+function isAtLeast(value, minimum) {
+  return value !== '' && Number.isFinite(Number(value)) && Number(value) >= minimum;
+}
+
+function isGreaterThanZero(value) {
+  return value !== '' && Number.isFinite(Number(value)) && Number(value) > 0;
+}
+
+const EXPERIMENT_METRICS = [
+  { key: 'makespan', label: 'Makespan', unit: 's' },
+  { key: 'executionTime', label: 'Execution time', unit: 's' },
+  { key: 'responseTime', label: 'Response time', unit: 's' },
+  { key: 'cpuUtilization', label: 'CPU utilization', unit: '%' },
+  { key: 'ramUtilization', label: 'RAM utilization', unit: '%' },
+  { key: 'loadBalancingEfficiency', label: 'Load-balancing efficiency', unit: '%' }
+];
+
+function GroupedMetricChart({ metric, baseline, ramAware }) {
+  const plot = { left: 62, right: 516, top: 20, bottom: 230 };
+  const plotHeight = plot.bottom - plot.top;
+  const values = [baseline, ramAware].filter((value) => value !== null);
+  const maxValue = Math.max(0, ...values);
+  const scaleMax = maxValue > 0 ? maxValue * 1.1 : 0;
+  const ticks = [0, 0.25, 0.5, 0.75, 1];
+  const groups = [
+    { label: 'Baseline EDLB', value: baseline, color: '#667085', center: 190 },
+    { label: 'RAM-Aware EDLB', value: ramAware, color: '#2563EB', center: 390 }
+  ];
+  const barWidth = 62;
+
+  return (
+    <section className="panel chart-block">
+      <div className="section-heading">
+        <div>
+          <span className="eyebrow">CloudSim experiment metric</span>
+          <h3>{metric.label}</h3>
+        </div>
+        <span className="section-note">Unit: {metric.unit}</span>
+      </div>
+      <div className="chart-scroll">
+        <svg
+          className="comparison-chart"
+          viewBox="0 0 560 300"
+          role="img"
+          aria-label={`${metric.label} comparison: Baseline EDLB and RAM-Aware EDLB`}
+        >
+          {ticks.map((tick) => {
+            const y = plot.bottom - tick * plotHeight;
+            const tickValue = scaleMax * tick;
+            return (
+              <g key={tick}>
+                <line className="chart-gridline" x1={plot.left} x2={plot.right} y1={y} y2={y} />
+                <text className="chart-axis-text chart-tick-text" x={plot.left - 10} y={y + 4} textAnchor="end">
+                  {formatNumber(tickValue)}
+                </text>
+              </g>
+            );
+          })}
+          <line className="chart-axis" x1={plot.left} x2={plot.left} y1={plot.top} y2={plot.bottom} />
+          <line className="chart-axis" x1={plot.left} x2={plot.right} y1={plot.bottom} y2={plot.bottom} />
+          <text className="chart-axis-text" transform="translate(17 126) rotate(-90)" textAnchor="middle">
+            {metric.label} ({metric.unit})
+          </text>
+          {groups.map((group) => {
+            const barHeight = scaleMax > 0 && group.value !== null
+              ? (group.value / scaleMax) * plotHeight
+              : 0;
+            const x = group.center - barWidth / 2;
+            const y = plot.bottom - barHeight;
+            return (
+              <g key={group.label}>
+                {group.value !== null ? (
+                  <>
+                    <rect
+                      className="chart-bar"
+                      x={x}
+                      y={y}
+                      width={barWidth}
+                      height={barHeight}
+                      fill={group.color}
+                      rx="5"
+                    >
+                      <title>{`${group.label}: ${formatNumber(group.value)} ${metric.unit}`}</title>
+                    </rect>
+                    <text className="chart-value-label" x={group.center} y={Math.max(plot.top + 13, y - 8)} textAnchor="middle">
+                      {formatNumber(group.value)}
+                    </text>
+                  </>
+                ) : (
+                  <text className="chart-missing-label" x={group.center} y={plot.bottom - 12} textAnchor="middle">
+                    Unavailable
+                  </text>
+                )}
+                <text className="chart-category-label" x={group.center} y={plot.bottom + 24} textAnchor="middle">
+                  {group.label}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+    </section>
+  );
+}
+
 function validateResourceConfig(resourceForm) {
   if (!resourceForm.name || !resourceForm.name.trim()) return 'Resource name is required.';
-  if (!Number.isFinite(resourceForm.hostCount) || resourceForm.hostCount < 1) return 'Host count must be at least 1.';
-  if (!Number.isFinite(resourceForm.hostMips) || resourceForm.hostMips < 1000) return 'Host MIPS must be at least 1000.';
-  if (!Number.isFinite(resourceForm.hostPes) || resourceForm.hostPes < 1) return 'Host PEs must be at least 1.';
-  if (!Number.isFinite(resourceForm.hostRamMb) || resourceForm.hostRamMb < 1024) return 'Host RAM must be at least 1024 MB.';
-  if (!Number.isFinite(resourceForm.hostBandwidthMbps) || resourceForm.hostBandwidthMbps < 1000) return 'Host bandwidth must be at least 1000 Mbps.';
-  if (!Number.isFinite(resourceForm.hostStorageGb) || resourceForm.hostStorageGb < 100) return 'Host storage must be at least 100 GB.';
-  if (!Number.isFinite(resourceForm.schedulingInterval) || resourceForm.schedulingInterval <= 0) return 'Scheduling interval must be greater than 0.';
+  if (!isAtLeast(resourceForm.hostCount, 1)) return 'Host count must be at least 1.';
+  if (!isAtLeast(resourceForm.hostMips, 1000)) return 'Host MIPS must be at least 1000.';
+  if (!isAtLeast(resourceForm.hostPes, 1)) return 'Host PEs must be at least 1.';
+  if (!isAtLeast(resourceForm.hostRamMb, 1024)) return 'Host RAM must be at least 1024 MB.';
+  if (!isAtLeast(resourceForm.hostBandwidthMbps, 1000)) return 'Host bandwidth must be at least 1000 Mbps.';
+  if (!isAtLeast(resourceForm.hostStorageGb, 100)) return 'Host storage must be at least 100 GB.';
+  if (!isGreaterThanZero(resourceForm.schedulingInterval)) return 'Scheduling interval must be greater than 0.';
   return null;
 }
 
 function validateVmConfig(vmForm) {
   if (!vmForm.id || !vmForm.id.trim()) return 'VM ID is required.';
-  if (!Number.isFinite(vmForm.mips) || vmForm.mips < 500) return 'VM MIPS must be at least 500.';
-  if (!Number.isFinite(vmForm.pes) || vmForm.pes < 1) return 'VM PEs must be at least 1.';
-  if (!Number.isFinite(vmForm.ramMb) || vmForm.ramMb < 512) return 'VM RAM must be at least 512 MB.';
-  if (!Number.isFinite(vmForm.bandwidthMbps) || vmForm.bandwidthMbps < 100) return 'VM bandwidth must be at least 100 Mbps.';
-  if (!Number.isFinite(vmForm.storageGb) || vmForm.storageGb < 10) return 'VM storage must be at least 10 GB.';
+  if (!isAtLeast(vmForm.mips, 500)) return 'VM MIPS must be at least 500.';
+  if (!isAtLeast(vmForm.pes, 1)) return 'VM PEs must be at least 1.';
+  if (!isAtLeast(vmForm.ramMb, 512)) return 'VM RAM must be at least 512 MB.';
+  if (!isAtLeast(vmForm.bandwidthMbps, 100)) return 'VM bandwidth must be at least 100 Mbps.';
+  if (!isAtLeast(vmForm.storageGb, 10)) return 'VM storage must be at least 10 GB.';
   return null;
 }
 
 function validateCloudletConfig(cloudletForm) {
   if (!cloudletForm.id || !cloudletForm.id.trim()) return 'Cloudlet ID is required.';
-  if (!Number.isFinite(cloudletForm.length) || cloudletForm.length < 1000) return 'Cloudlet length must be at least 1000.';
-  if (!Number.isFinite(cloudletForm.pes) || cloudletForm.pes < 1) return 'Cloudlet PEs must be at least 1.';
-  if (!Number.isFinite(cloudletForm.fileSize) || cloudletForm.fileSize < 100) return 'Cloudlet file size must be at least 100.';
-  if (!Number.isFinite(cloudletForm.outputSize) || cloudletForm.outputSize < 100) return 'Cloudlet output size must be at least 100.';
-  if (!Number.isFinite(cloudletForm.ramRequirementMb) || cloudletForm.ramRequirementMb < 256) return 'Cloudlet RAM requirement must be at least 256 MB.';
+  if (!isAtLeast(cloudletForm.length, 1000)) return 'Cloudlet length must be at least 1000.';
+  if (!isAtLeast(cloudletForm.pes, 1)) return 'Cloudlet PEs must be at least 1.';
+  if (!isAtLeast(cloudletForm.fileSize, 100)) return 'Cloudlet file size must be at least 100.';
+  if (!isAtLeast(cloudletForm.outputSize, 100)) return 'Cloudlet output size must be at least 100.';
+  if (!isAtLeast(cloudletForm.ramRequirementMb, 256)) return 'Cloudlet RAM requirement must be at least 256 MB.';
   return null;
 }
 
@@ -113,6 +218,7 @@ function App() {
   const [cloudletForm, setCloudletForm] = useState(emptyCloudletForm);
   const [experimentForm, setExperimentForm] = useState(emptyExperimentForm);
   const [status, setStatus] = useState('Waiting for user input');
+  const [resetConfirmation, setResetConfirmation] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const refreshAll = async () => {
@@ -140,8 +246,10 @@ function App() {
         alerts: ['No runtime data available'],
         recentSchedulingDecisions: []
       });
+      return true;
     } catch (error) {
       setStatus(error.message);
+      return false;
     }
   };
 
@@ -149,14 +257,12 @@ function App() {
     refreshAll();
   }, []);
 
-  const pendingCloudlets = useMemo(
-    () => cloudlets.filter((item) => item.status === 'Pending' || item.status === 'Submitted').length,
-    [cloudlets]
-  );
-
   const experimentSummary = experiments.length
     ? experiments[experiments.length - 1]
     : null;
+  const latestBaselineExperiment = [...experiments].reverse().find((experiment) => experiment.algorithm === 'baseline');
+  const latestRamAwareExperiment = [...experiments].reverse().find((experiment) => experiment.algorithm === 'ram-aware');
+  const maxConfiguredVmRam = Math.max(0, ...vms.map((vm) => Number(vm.ramMb) || 0));
 
   const addResource = async (event) => {
     event.preventDefault();
@@ -169,7 +275,16 @@ function App() {
     try {
       await apiRequest('/api/resources', {
         method: 'POST',
-        body: JSON.stringify(resourceForm)
+        body: JSON.stringify({
+          ...resourceForm,
+          hostCount: Number(resourceForm.hostCount),
+          hostMips: Number(resourceForm.hostMips),
+          hostPes: Number(resourceForm.hostPes),
+          hostRamMb: Number(resourceForm.hostRamMb),
+          hostBandwidthMbps: Number(resourceForm.hostBandwidthMbps),
+          hostStorageGb: Number(resourceForm.hostStorageGb),
+          schedulingInterval: Number(resourceForm.schedulingInterval)
+        })
       });
       setStatus('Host configuration saved');
       setResourceForm(emptyResourceForm);
@@ -192,7 +307,14 @@ function App() {
     try {
       await apiRequest('/api/vms', {
         method: 'POST',
-        body: JSON.stringify(vmForm)
+        body: JSON.stringify({
+          ...vmForm,
+          mips: Number(vmForm.mips),
+          pes: Number(vmForm.pes),
+          ramMb: Number(vmForm.ramMb),
+          bandwidthMbps: Number(vmForm.bandwidthMbps),
+          storageGb: Number(vmForm.storageGb)
+        })
       });
       setStatus('Virtual machine created');
       setVmForm(emptyVmForm);
@@ -215,7 +337,14 @@ function App() {
     try {
       await apiRequest('/api/cloudlets', {
         method: 'POST',
-        body: JSON.stringify(cloudletForm)
+        body: JSON.stringify({
+          ...cloudletForm,
+          length: Number(cloudletForm.length),
+          pes: Number(cloudletForm.pes),
+          fileSize: Number(cloudletForm.fileSize),
+          outputSize: Number(cloudletForm.outputSize),
+          ramRequirementMb: Number(cloudletForm.ramRequirementMb)
+        })
       });
       setStatus('Cloudlet added');
       setCloudletForm(emptyCloudletForm);
@@ -255,36 +384,88 @@ function App() {
     }
   };
 
+  const resetConfiguration = async () => {
+    setIsLoading(true);
+    setResetConfirmation('');
+    try {
+      await apiRequest('/api/reset', { method: 'POST' });
+      setVms([]);
+      setCloudlets([]);
+      setResources([]);
+      setDecisions([]);
+      setExperiments([]);
+      setDashboard({
+        activeVms: 0,
+        pendingTasks: 0,
+        completedTasks: 0,
+        resourceStatus: 'No host configuration available',
+        latestExperiment: 'No experiments have been configured',
+        alerts: ['No runtime data available'],
+        recentSchedulingDecisions: []
+      });
+      setResourceForm(emptyResourceForm);
+      setVmForm(emptyVmForm);
+      setCloudletForm(emptyCloudletForm);
+      setExperimentForm(emptyExperimentForm);
+      setActiveTab('Dashboard');
+      if (!await refreshAll()) {
+        throw new Error('Reset succeeded, but the cleared backend data could not be reloaded.');
+      }
+      setStatus('All project data has been cleared.');
+      setResetConfirmation('All project data has been cleared.');
+    } catch (error) {
+      setStatus(error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const renderDashboard = () => (
     <div className="page-block">
       <div className="header-row">
         <h2>Dashboard Overview</h2>
-        <button className="primary-button" onClick={runExperiment} disabled={isLoading || vms.length === 0 || cloudlets.length === 0 || resources.length === 0}>
-          Run Experiment
-        </button>
+        <div className="dashboard-actions">
+          <button
+            className="dashboard-reset-button"
+            type="button"
+            onClick={resetConfiguration}
+            disabled={isLoading}
+            aria-label="Reset / Clear All"
+          >
+            Reset / Clear All
+          </button>
+          <button className="primary-button" onClick={runExperiment} disabled={isLoading || vms.length === 0 || cloudlets.length === 0 || resources.length === 0}>
+            Run Experiment
+          </button>
+        </div>
+      </div>
+      {resetConfirmation && (
+        <p className="reset-confirmation" role="status">
+          {resetConfirmation}
+        </p>
+      )}
+
+      <div className="stat-grid">
+        <div className="stat-card">
+          <span className="label">Virtual Machines</span>
+          <strong>{vms.length}</strong>
+        </div>
+        <div className="stat-card">
+          <span className="label">Tasks</span>
+          <strong>{cloudlets.length}</strong>
+        </div>
+        <div className="stat-card">
+          <span className="label">Resources</span>
+          <strong>{resources.length}</strong>
+        </div>
+        <div className="stat-card">
+          <span className="label">Experiments</span>
+          <strong>{experiments.length}</strong>
+        </div>
       </div>
 
       {dashboard && (vms.length || cloudlets.length || resources.length || experiments.length) ? (
         <>
-          <div className="stat-grid">
-            <div className="stat-card">
-              <span className="label">Active VMs</span>
-              <strong>{dashboard.activeVms ?? vms.length}</strong>
-            </div>
-            <div className="stat-card">
-              <span className="label">Pending Tasks</span>
-              <strong>{dashboard.pendingTasks ?? pendingCloudlets}</strong>
-            </div>
-            <div className="stat-card">
-              <span className="label">Completed Tasks</span>
-              <strong>{dashboard.completedTasks ?? cloudlets.filter((item) => item.status === 'Completed').length}</strong>
-            </div>
-            <div className="stat-card">
-              <span className="label">Resource Status</span>
-              <strong>{dashboard.resourceStatus ?? 'No runtime data available'}</strong>
-            </div>
-          </div>
-
           <div className="two-column-grid">
             <div className="panel">
               <h3>Latest Experiment Status</h3>
@@ -305,6 +486,36 @@ function App() {
               )}
             </div>
           </div>
+          {vms.length > 0 && (
+            <section className="panel resource-overview">
+              <div className="section-heading">
+                <div>
+                  <span className="eyebrow">Resource profile</span>
+                  <h3>Configured VM RAM capacity</h3>
+                </div>
+                <span className="section-note">Configured capacity · not live utilization</span>
+              </div>
+              <div className="capacity-list">
+                {vms.map((vm) => {
+                  const ramMb = Number(vm.ramMb) || 0;
+                  const capacityPercent = maxConfiguredVmRam > 0 ? (ramMb / maxConfiguredVmRam) * 100 : 0;
+                  return (
+                    <div className="capacity-row" key={vm.id}>
+                      <span className="capacity-name">{vm.id}</span>
+                      <div
+                        className="capacity-track"
+                        role="img"
+                        aria-label={`${vm.id}: ${formatNumber(ramMb)} MB configured RAM`}
+                      >
+                        <div className="capacity-fill" style={{ width: `${capacityPercent}%` }} />
+                      </div>
+                      <span className="capacity-value">{formatNumber(ramMb)} MB</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
         </>
       ) : (
         <div className="empty-state">No runtime data available</div>
@@ -316,12 +527,30 @@ function App() {
     <div className="page-block">
       <h2>Virtual Machines</h2>
       <form className="form-grid" onSubmit={addVm}>
-        <input type="text" placeholder="VM ID" value={vmForm.id} onChange={(e) => setVmForm({ ...vmForm, id: e.target.value })} />
-        <input type="number" min="500" placeholder="MIPS" value={vmForm.mips} onChange={(e) => setVmForm({ ...vmForm, mips: Number(e.target.value) })} />
-        <input type="number" min="1" placeholder="PEs" value={vmForm.pes} onChange={(e) => setVmForm({ ...vmForm, pes: Number(e.target.value) })} />
-        <input type="number" min="512" placeholder="RAM (MB)" value={vmForm.ramMb} onChange={(e) => setVmForm({ ...vmForm, ramMb: Number(e.target.value) })} />
-        <input type="number" min="100" placeholder="Bandwidth" value={vmForm.bandwidthMbps} onChange={(e) => setVmForm({ ...vmForm, bandwidthMbps: Number(e.target.value) })} />
-        <input type="number" min="10" placeholder="Storage (GB)" value={vmForm.storageGb} onChange={(e) => setVmForm({ ...vmForm, storageGb: Number(e.target.value) })} />
+        <div className="form-field">
+          <label htmlFor="vm-id">VM ID</label>
+          <input id="vm-id" type="text" placeholder="Enter VM ID" value={vmForm.id} onChange={(e) => setVmForm({ ...vmForm, id: e.target.value })} />
+        </div>
+        <div className="form-field">
+          <label htmlFor="vm-mips">MIPS</label>
+          <input id="vm-mips" type="number" min="500" placeholder="Enter MIPS" value={vmForm.mips} onChange={(e) => setVmForm({ ...vmForm, mips: e.target.value })} />
+        </div>
+        <div className="form-field">
+          <label htmlFor="vm-pes">PEs</label>
+          <input id="vm-pes" type="number" min="1" placeholder="Enter number of PEs" value={vmForm.pes} onChange={(e) => setVmForm({ ...vmForm, pes: e.target.value })} />
+        </div>
+        <div className="form-field">
+          <label htmlFor="vm-ram">RAM (MB)</label>
+          <input id="vm-ram" type="number" min="512" placeholder="Enter RAM in MB" value={vmForm.ramMb} onChange={(e) => setVmForm({ ...vmForm, ramMb: e.target.value })} />
+        </div>
+        <div className="form-field">
+          <label htmlFor="vm-bandwidth">Bandwidth (Mbps)</label>
+          <input id="vm-bandwidth" type="number" min="100" placeholder="Enter bandwidth" value={vmForm.bandwidthMbps} onChange={(e) => setVmForm({ ...vmForm, bandwidthMbps: e.target.value })} />
+        </div>
+        <div className="form-field">
+          <label htmlFor="vm-storage">Storage (GB)</label>
+          <input id="vm-storage" type="number" min="10" placeholder="Enter storage in GB" value={vmForm.storageGb} onChange={(e) => setVmForm({ ...vmForm, storageGb: e.target.value })} />
+        </div>
         <button type="submit" className="primary-button" disabled={isLoading}>Create VM</button>
       </form>
 
@@ -352,7 +581,7 @@ function App() {
                   <td>{formatNumber(vm.storageGb)} GB</td>
                   <td>{vm.status || 'Configured'}</td>
                   <td>{vm.currentCloudlet || 'None'}</td>
-                  <td>{vm.utilization ? `${vm.utilization}%` : '0%'}</td>
+                  <td>{typeof vm.utilization === 'number' && Number.isFinite(vm.utilization) ? `${formatNumber(vm.utilization)}%` : 'Unavailable'}</td>
                 </tr>
               ))}
             </tbody>
@@ -368,12 +597,30 @@ function App() {
     <div className="page-block">
       <h2>Cloudlets / Tasks</h2>
       <form className="form-grid" onSubmit={addCloudlet}>
-        <input type="text" placeholder="Cloudlet ID" value={cloudletForm.id} onChange={(e) => setCloudletForm({ ...cloudletForm, id: e.target.value })} />
-        <input type="number" min="1000" placeholder="Length" value={cloudletForm.length} onChange={(e) => setCloudletForm({ ...cloudletForm, length: Number(e.target.value) })} />
-        <input type="number" min="1" placeholder="PEs" value={cloudletForm.pes} onChange={(e) => setCloudletForm({ ...cloudletForm, pes: Number(e.target.value) })} />
-        <input type="number" min="100" placeholder="File Size" value={cloudletForm.fileSize} onChange={(e) => setCloudletForm({ ...cloudletForm, fileSize: Number(e.target.value) })} />
-        <input type="number" min="100" placeholder="Output Size" value={cloudletForm.outputSize} onChange={(e) => setCloudletForm({ ...cloudletForm, outputSize: Number(e.target.value) })} />
-        <input type="number" min="256" placeholder="RAM Requirement (MB)" value={cloudletForm.ramRequirementMb} onChange={(e) => setCloudletForm({ ...cloudletForm, ramRequirementMb: Number(e.target.value) })} />
+        <div className="form-field">
+          <label htmlFor="cloudlet-id">Cloudlet ID</label>
+          <input id="cloudlet-id" type="text" placeholder="Enter Cloudlet ID" value={cloudletForm.id} onChange={(e) => setCloudletForm({ ...cloudletForm, id: e.target.value })} />
+        </div>
+        <div className="form-field">
+          <label htmlFor="cloudlet-length">Length</label>
+          <input id="cloudlet-length" type="number" min="1000" placeholder="Enter cloudlet length" value={cloudletForm.length} onChange={(e) => setCloudletForm({ ...cloudletForm, length: e.target.value })} />
+        </div>
+        <div className="form-field">
+          <label htmlFor="cloudlet-pes">PEs</label>
+          <input id="cloudlet-pes" type="number" min="1" placeholder="Enter number of PEs" value={cloudletForm.pes} onChange={(e) => setCloudletForm({ ...cloudletForm, pes: e.target.value })} />
+        </div>
+        <div className="form-field">
+          <label htmlFor="cloudlet-file-size">File Size</label>
+          <input id="cloudlet-file-size" type="number" min="100" placeholder="Enter file size" value={cloudletForm.fileSize} onChange={(e) => setCloudletForm({ ...cloudletForm, fileSize: e.target.value })} />
+        </div>
+        <div className="form-field">
+          <label htmlFor="cloudlet-output-size">Output Size</label>
+          <input id="cloudlet-output-size" type="number" min="100" placeholder="Enter output size" value={cloudletForm.outputSize} onChange={(e) => setCloudletForm({ ...cloudletForm, outputSize: e.target.value })} />
+        </div>
+        <div className="form-field">
+          <label htmlFor="cloudlet-ram">Required RAM (MB)</label>
+          <input id="cloudlet-ram" type="number" min="256" placeholder="Enter required RAM" value={cloudletForm.ramRequirementMb} onChange={(e) => setCloudletForm({ ...cloudletForm, ramRequirementMb: e.target.value })} />
+        </div>
         <button type="submit" className="primary-button" disabled={isLoading}>Create Cloudlet</button>
       </form>
 
@@ -416,14 +663,38 @@ function App() {
     <div className="page-block">
       <h2>Resources</h2>
       <form className="form-grid" onSubmit={addResource}>
-        <input type="text" placeholder="Configuration name" value={resourceForm.name} onChange={(e) => setResourceForm({ ...resourceForm, name: e.target.value })} />
-        <input type="number" min="1" placeholder="Host count" value={resourceForm.hostCount} onChange={(e) => setResourceForm({ ...resourceForm, hostCount: Number(e.target.value) })} />
-        <input type="number" min="1000" placeholder="Host MIPS" value={resourceForm.hostMips} onChange={(e) => setResourceForm({ ...resourceForm, hostMips: Number(e.target.value) })} />
-        <input type="number" min="1" placeholder="Host PEs" value={resourceForm.hostPes} onChange={(e) => setResourceForm({ ...resourceForm, hostPes: Number(e.target.value) })} />
-        <input type="number" min="1024" placeholder="Host RAM (MB)" value={resourceForm.hostRamMb} onChange={(e) => setResourceForm({ ...resourceForm, hostRamMb: Number(e.target.value) })} />
-        <input type="number" min="1000" placeholder="Bandwidth" value={resourceForm.hostBandwidthMbps} onChange={(e) => setResourceForm({ ...resourceForm, hostBandwidthMbps: Number(e.target.value) })} />
-        <input type="number" min="100" placeholder="Storage (GB)" value={resourceForm.hostStorageGb} onChange={(e) => setResourceForm({ ...resourceForm, hostStorageGb: Number(e.target.value) })} />
-        <input type="number" min="0.1" step="0.1" placeholder="Scheduling interval" value={resourceForm.schedulingInterval} onChange={(e) => setResourceForm({ ...resourceForm, schedulingInterval: Number(e.target.value) })} />
+        <div className="form-field">
+          <label htmlFor="resource-name">Configuration Name</label>
+          <input id="resource-name" type="text" placeholder="Enter configuration name" value={resourceForm.name} onChange={(e) => setResourceForm({ ...resourceForm, name: e.target.value })} />
+        </div>
+        <div className="form-field">
+          <label htmlFor="resource-host-count">Number of Hosts</label>
+          <input id="resource-host-count" type="number" min="1" placeholder="Enter number of hosts" value={resourceForm.hostCount} onChange={(e) => setResourceForm({ ...resourceForm, hostCount: e.target.value })} />
+        </div>
+        <div className="form-field">
+          <label htmlFor="resource-host-mips">Host MIPS</label>
+          <input id="resource-host-mips" type="number" min="1000" placeholder="Enter host MIPS" value={resourceForm.hostMips} onChange={(e) => setResourceForm({ ...resourceForm, hostMips: e.target.value })} />
+        </div>
+        <div className="form-field">
+          <label htmlFor="resource-host-pes">Host PEs</label>
+          <input id="resource-host-pes" type="number" min="1" placeholder="Enter host PEs" value={resourceForm.hostPes} onChange={(e) => setResourceForm({ ...resourceForm, hostPes: e.target.value })} />
+        </div>
+        <div className="form-field">
+          <label htmlFor="resource-host-ram">Host RAM (MB)</label>
+          <input id="resource-host-ram" type="number" min="1024" placeholder="Enter RAM in MB" value={resourceForm.hostRamMb} onChange={(e) => setResourceForm({ ...resourceForm, hostRamMb: e.target.value })} />
+        </div>
+        <div className="form-field">
+          <label htmlFor="resource-host-storage">Host Storage (GB)</label>
+          <input id="resource-host-storage" type="number" min="100" placeholder="Enter storage in GB" value={resourceForm.hostStorageGb} onChange={(e) => setResourceForm({ ...resourceForm, hostStorageGb: e.target.value })} />
+        </div>
+        <div className="form-field">
+          <label htmlFor="resource-host-bandwidth">Host Bandwidth (Mbps)</label>
+          <input id="resource-host-bandwidth" type="number" min="1000" placeholder="Enter bandwidth" value={resourceForm.hostBandwidthMbps} onChange={(e) => setResourceForm({ ...resourceForm, hostBandwidthMbps: e.target.value })} />
+        </div>
+        <div className="form-field">
+          <label htmlFor="resource-scheduling-interval">Scheduling Interval</label>
+          <input id="resource-scheduling-interval" type="number" min="0.1" step="0.1" placeholder="Enter interval" value={resourceForm.schedulingInterval} onChange={(e) => setResourceForm({ ...resourceForm, schedulingInterval: e.target.value })} />
+        </div>
         <button type="submit" className="primary-button" disabled={isLoading}>Save Host Configuration</button>
       </form>
 
@@ -471,6 +742,7 @@ function App() {
             <thead>
               <tr>
                 <th>Cloudlet</th>
+                <th>Run #</th>
                 <th>Selected VM</th>
                 <th>Required RAM</th>
                 <th>Available RAM</th>
@@ -483,6 +755,7 @@ function App() {
               {decisions.map((decision, index) => (
                 <tr key={`${decision.cloudletId}-${index}`}>
                   <td>{decision.cloudletId}</td>
+                  <td>{decision.runNumber ?? 'Unavailable'}</td>
                   <td>{decision.selectedVmId}</td>
                   <td>{decision.requiredRamMb} MB</td>
                   <td>{decision.availableRamMb} MB</td>
@@ -529,6 +802,9 @@ function App() {
                 <th>Algorithm</th>
                 <th>Timestamp</th>
                 <th>Runs</th>
+                <th>Completed</th>
+                <th>Rejected</th>
+                <th>Failed</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -539,6 +815,9 @@ function App() {
                   <td>{experiment.algorithm}</td>
                   <td>{new Date(experiment.timestamp).toLocaleString()}</td>
                   <td>{experiment.runs}</td>
+                  <td>{experiment.completedCloudlets ?? 'Unavailable'}</td>
+                  <td>{experiment.rejectedCloudlets ?? 'Unavailable'}</td>
+                  <td>{experiment.failedCloudlets ?? 'Unavailable'}</td>
                   <td>{experiment.status}</td>
                 </tr>
               ))}
@@ -556,32 +835,80 @@ function App() {
       <h2>Research Analytics</h2>
       {experiments.length ? (
         <>
-          <div className="stat-grid metrics-grid">
-            {experiments.map((experiment) => (
-              <div key={experiment.id} className="stat-card metric-card">
-                <span className="label">{experiment.algorithm}</span>
-                <strong>{formatNumber(experiment.metrics?.makespan ?? 0)} s</strong>
-                <small>Makespan</small>
+          <section className="panel">
+            <div className="section-heading">
+              <div>
+                <span className="eyebrow">CloudSim results</span>
+                <h3>Cloudlet outcomes by experiment</h3>
               </div>
-            ))}
-          </div>
-          <div className="chart-block">
-            <h3>Experiment Metrics</h3>
-            <div className="chart-list">
-              {experiments.map((experiment) => (
-                <div key={experiment.id} className="chart-row">
-                  <span>{experiment.algorithm}</span>
-                  <div className="bar-track">
-                    <div className="bar-fill" style={{ width: `${Math.min(100, (experiment.metrics?.makespan ?? 0) / 10)}%` }} />
-                  </div>
-                  <span>{formatNumber(experiment.metrics?.makespan ?? 0)} s</span>
-                </div>
-              ))}
+              <span className="section-note">Counts returned by the backend</span>
             </div>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Algorithm</th>
+                    <th>Runs</th>
+                    <th>Completed</th>
+                    <th>Rejected</th>
+                    <th>Failed</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {experiments.map((experiment) => (
+                    <tr key={`${experiment.id}-outcomes`}>
+                      <td>{experiment.algorithm}</td>
+                      <td>{experiment.runs ?? 'Unavailable'}</td>
+                      <td>{experiment.completedCloudlets ?? 'Unavailable'}</td>
+                      <td>{experiment.rejectedCloudlets ?? 'Unavailable'}</td>
+                      <td>{experiment.failedCloudlets ?? 'Unavailable'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <div className="chart-legend" aria-label="Algorithm legend">
+            <span><i className="legend-swatch baseline-swatch" />Baseline EDLB</span>
+            <span><i className="legend-swatch ram-aware-swatch" />RAM-Aware EDLB</span>
           </div>
+          <div className="analytics-grid">
+            {EXPERIMENT_METRICS.map((metric) => {
+              const rawBaseline = latestBaselineExperiment?.metrics?.[metric.key];
+              const rawRamAware = latestRamAwareExperiment?.metrics?.[metric.key];
+              const baseline = rawBaseline !== null && rawBaseline !== undefined && Number.isFinite(Number(rawBaseline))
+                ? Number(rawBaseline)
+                : null;
+              const ramAware = rawRamAware !== null && rawRamAware !== undefined && Number.isFinite(Number(rawRamAware))
+                ? Number(rawRamAware)
+                : null;
+              if (baseline === null && ramAware === null) return null;
+              return (
+                <GroupedMetricChart
+                  key={metric.key}
+                  metric={metric}
+                  baseline={baseline}
+                  ramAware={ramAware}
+                />
+              );
+            })}
+          </div>
+          {!EXPERIMENT_METRICS.some((metric) => {
+            const baseline = latestBaselineExperiment?.metrics?.[metric.key];
+            const ramAware = latestRamAwareExperiment?.metrics?.[metric.key];
+            return [baseline, ramAware].some((value) => value !== null && value !== undefined && Number.isFinite(Number(value)));
+          }) && (
+            <div className="empty-state">
+              <strong>No comparable experiment metrics available</strong>
+              <span>Run Baseline EDLB and RAM-Aware EDLB experiments to view the comparison.</span>
+            </div>
+          )}
         </>
       ) : (
-        <div className="empty-state">No experiment data available for visualization.</div>
+        <div className="empty-state">
+          <strong>No data available</strong>
+          <span>Run an experiment to generate CloudSim results.</span>
+        </div>
       )}
     </div>
   );
@@ -663,19 +990,19 @@ function App() {
             <div className="stat-grid compact-grid">
               <div className="stat-card">
                 <span className="label">Makespan</span>
-                <strong>{formatNumber(experimentSummary.metrics?.makespan ?? 0)} s</strong>
+                <strong>{Number.isFinite(experimentSummary.metrics?.makespan) ? `${formatNumber(experimentSummary.metrics.makespan)} s` : 'Unavailable'}</strong>
               </div>
               <div className="stat-card">
                 <span className="label">CPU Utilization</span>
-                <strong>{formatNumber(experimentSummary.metrics?.cpuUtilization ?? 0)}%</strong>
+                <strong>{Number.isFinite(experimentSummary.metrics?.cpuUtilization) ? `${formatNumber(experimentSummary.metrics.cpuUtilization)}%` : 'Unavailable'}</strong>
               </div>
               <div className="stat-card">
                 <span className="label">RAM Utilization</span>
-                <strong>{formatNumber(experimentSummary.metrics?.ramUtilization ?? 0)}%</strong>
+                <strong>{Number.isFinite(experimentSummary.metrics?.ramUtilization) ? `${formatNumber(experimentSummary.metrics.ramUtilization)}%` : 'Unavailable'}</strong>
               </div>
               <div className="stat-card">
                 <span className="label">Response Time</span>
-                <strong>{formatNumber(experimentSummary.metrics?.responseTime ?? 0)} s</strong>
+                <strong>{Number.isFinite(experimentSummary.metrics?.responseTime) ? `${formatNumber(experimentSummary.metrics.responseTime)} s` : 'Unavailable'}</strong>
               </div>
             </div>
           </div>
