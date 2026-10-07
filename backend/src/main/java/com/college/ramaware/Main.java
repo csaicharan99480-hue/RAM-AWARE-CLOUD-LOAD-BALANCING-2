@@ -60,7 +60,8 @@ public class Main {
 
     public static void main(String[] args) throws IOException {
         OBJECT_MAPPER.setSerializationInclusion(JsonInclude.Include.NON_NULL);
-        var server = HttpServer.create(new InetSocketAddress(8080), 0);
+       int port = Integer.parseInt(System.getenv().getOrDefault("PORT", "8080"));
+        var server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
         server.createContext("/api/health", Main::handleHealth);
         server.createContext("/api/resources", Main::handleResources);
         server.createContext("/api/vms", Main::handleVms);
